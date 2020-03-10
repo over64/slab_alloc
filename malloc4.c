@@ -2,38 +2,18 @@
 #include <stdlib.h>
 #include <limits.h>
 
-typedef union {
-  unsigned long rcAndN;
-  unsigned int n;
-} meta;
-
 typedef struct {
   unsigned int  rcAndSc;
   unsigned int  n;
-//meta m;
   unsigned long payload;
 } obj;
-
-typedef struct {
-  unsigned long bmap_l1;
-  long bmap_l2[64];
-  long bmap_l3[4096];
-  long bmap_l4[262144];
-} maps_t;
 
 typedef struct slab {
   unsigned long bmap_l1;
   long bmap_l2[64];
   long bmap_l3[4096];
   long bmap_l4[262144];
-
-  //struct slab* next;
-//  unsigned long k1;
-//  unsigned long k2;
   obj  data[16777216];
-//  obj data[64];
-//  obj data[4096];
-//  obj data[262144];
   struct slab* next;
 } slab;
 
@@ -74,13 +54,8 @@ void my_init() {
 }
 
 void __attribute((always_inline)) my_reindex(unsigned long* l4_start) {
-  unsigned long* l1_start;
-  unsigned long* l2_start;
-  unsigned long* l3_start;
-
-  unsigned long l1bit;
-  unsigned long l2bit;
-  unsigned long l3bit;
+  unsigned long *l1_start, *l2_start, *l3_start;
+  unsigned long  l1bit, l2bit, l3bit;
 
   goto ii4;
 ii1:
@@ -167,10 +142,6 @@ typedef struct {
 sclass_t classes[] = {{ -16, -262145 }, { -32, -262145 }};
 //long class_to_size[] = {-16, -32};
 //long class_to_entries[] = {-262145, -262145};
-
-unsigned long shl_inv(unsigned long x, unsigned long n) {
-  return ~(x << n);
-}
 
 
 void __attribute__((always_inline)) free_storage_class(void* ptr, unsigned int m, long size, long entries) {
@@ -318,8 +289,4 @@ int main() {
   }
 
   printf("16777216 * 10^3 iterations done");
-}
-
-unsigned long inv(unsigned long w) {
-  return ~w;
 }
