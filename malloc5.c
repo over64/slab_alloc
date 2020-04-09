@@ -128,7 +128,7 @@ void* __attribute__((noinline)) my_malloc(long size) {
     my_reindex(l4_start, meta);
 
 
-  unsigned int n = 64 * idx4 + (unsigned int) l4bit;
+  unsigned int n = 64 * idx4 | (unsigned int) l4bit;
 //  printf("el.n = %d\n", n);
 
   obj* el = &current_data[n];
