@@ -9,6 +9,7 @@ typedef struct {
 } obj;
 
 typedef struct meta_t {
+  unsigned long* ptr4;
   unsigned int idx4; // 0
   unsigned int idx3; // 0
   unsigned int idx2; // 0
@@ -16,14 +17,14 @@ typedef struct meta_t {
   unsigned int l2bit;
   unsigned int l1bit;
   unsigned int is_full;
-  unsigned int _pad_;
+  unsigned int iidx4;
 } meta_t;
 
 typedef struct slab {
   unsigned long bmap_l1;
-  long bmap_l2[64];
-  long bmap_l3[4096];
-  long bmap_l4[262144];
+  unsigned long bmap_l2[64];
+  unsigned long bmap_l3[4096];
+  unsigned long bmap_l4[262144];
   meta_t meta;
   obj data[16777216];
   struct slab* next;
@@ -45,11 +46,14 @@ void my_init() {
   printf("slab size(bytes): %ld\n", sizeof(slab));
   // как влияет calloc?
   cslab = (slab*) calloc(sizeof(slab), 1);
+  cslab->meta.ptr4 = &cslab->bmap_l4[0];
   entry.current_meta = &(cslab)->meta;
   entry.full = NULL;
   entry.partial = NULL;
   entry.free = NULL;
   printf("data start(0) = %ld\n", &cslab->data);
+  printf("l4_start(0) = %ld\n", &cslab->bmap_l4[0]);
+  printf("meta.ptr4 = %ld\n", &cslab->meta.ptr4);
 
 //  if(entry.current == NULL) {
 //    printf("cannot allocate slab\n");
@@ -57,7 +61,8 @@ void my_init() {
 //  }
 }
 
-void __attribute((always_inline)) my_reindex(unsigned long* l4_start, meta_t* meta) {
+void __attribute((always_inline)) my_reindex( meta_t* meta) {
+  unsigned long* l4_start = ((unsigned long*) meta) - 64 * 64 * 64;
   unsigned long *l1_start, *l2_start, *l3_start;
   unsigned long  l1bit, l2bit, l3bit;
 
@@ -66,8 +71,11 @@ ii1:
 //  printf("reindex1");
   // this slab is full;
   if(meta->is_full) {
-    printf("out of memory\n");
-    exit(1);
+    //printf("out of memory\n");
+    //exit(1);
+    abort();
+    // die
+//    __builtin_unreachable();
   }
 
   meta->is_full = 1;
@@ -106,6 +114,8 @@ ii4_tail:
   if(__builtin_expect(l3bit == 0, 0)) goto ii3;
   l3bit--;
   meta->idx4 = 64 * meta->idx3 + (unsigned int) l3bit;
+  meta->ptr4 = &l4_start[meta->idx4];
+  meta->iidx4 = meta->idx4 * 64;
   meta->l3bit = l3bit;
 }
 
@@ -113,23 +123,26 @@ void* __attribute__((noinline)) my_malloc(long size) {
   meta_t *meta = entry.current_meta;
   obj* current_data = (obj*)(meta + 1);
 
-  unsigned long* l4_start = ((unsigned long*) meta) - 64 * 64 * 64;
-  unsigned int idx4 = meta->idx4;
-  unsigned long l4old = l4_start[idx4];
+  //printf("ptr4 = %ld\n", meta->ptr4);
+
+  //unsigned long* l4_start = ((unsigned long*) meta) - 64 * 64 * 64;
+  //unsigned int idx4 = meta->idx4;
+  unsigned long l4old = *(meta->ptr4);
   unsigned long l4bit = __builtin_ffsl(~l4old);
+  unsigned int iidx4 = meta->iidx4;
   if(l4bit == 0) __builtin_unreachable();
   l4bit--;
 
   unsigned long l4new = l4old | (1UL << l4bit);
-  l4_start[idx4] = l4new;
+  *meta->ptr4 = l4new;
 
   if(__builtin_expect(__builtin_popcountl(l4old) == 63, 0))
   //if(__builtin_expect(l4new == ULONG_MAX, 0))
-    my_reindex(l4_start, meta);
+    my_reindex(meta);
 
 
-  unsigned int n = 64 * idx4 | (unsigned int) l4bit;
-//  printf("el.n = %d\n", n);
+  unsigned int n = iidx4 | (unsigned int) l4bit;
+  //printf("el.n = %d\n", n);
 
   obj* el = &current_data[n];
   el->rcAndSc = 0;
@@ -163,6 +176,9 @@ void __attribute__((always_inline)) free_storage_class(void* ptr, unsigned int m
   //printf("free n = %d\n", m);
 
   unsigned long* l4_start = &lptr[entries];
+//  printf("free l4_start=%ld\n", l4_start);
+ // exit(1);
+  //printf("free m=%u\n", m);
   unsigned long idx4 = m % 64;
   m = m / 64;
   unsigned long l4map = l4_start[m];
@@ -260,18 +276,20 @@ int main() {
      printf("assertion failed on l1\n");
      exit(1);
    }
+
 */
 
 
-
-    for(int i = 16777215; i >= 0; i--)
+    for(int i = 16777215; i >= 0; i--) {
       my_free(&(cslab->data)[i].payload);
+    }
     cslab->meta.is_full = 0; //FIXME
 
 /*
+
     for(int i = 0; i < 262144; i++) {
       if(cslab->bmap_l4[i] != 0) {
-        printf("free assertion failed on l4 at %d\n", i);
+        printf("free assertion failed on l4 at %d with %lu \n", i, cslab->bmap_l4[i]);
         exit(1);
       }
     }

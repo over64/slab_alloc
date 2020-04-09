@@ -223,7 +223,7 @@ int main() {
 //      };
 //      n++;
     }
-/*
+
     for(int i = 0; i < 262144; i++) {
       if(cslab->bmap_l4[i] != ULONG_MAX) {
         printf("assertion failed on l4 at %d\n", i);
@@ -249,7 +249,7 @@ int main() {
      printf("assertion failed on l1\n");
      exit(1);
    }
-*/
+
 
 
 
@@ -257,7 +257,7 @@ int main() {
       my_free(&(((obj*)entry.current_data)[i].payload));
     entry.is_full = 0; //FIXME
 
-/*
+
     for(int i = 0; i < 262144; i++) {
       if(cslab->bmap_l4[i] != 0) {
         printf("free assertion failed on l4 at %d\n", i);
@@ -283,7 +283,7 @@ int main() {
      printf("free assertion failed on l1\n");
      exit(1);
    }
-*/
+
 
     n++;
   }
