@@ -73,7 +73,10 @@ ii1:
   if(meta->is_full) {
     //printf("out of memory\n");
     //exit(1);
-    abort();
+    //abort();
+    //void *ptr = (void *)0x1234567;  // a random memory address
+    //goto *ptr;
+    while(1);
     // die
 //    __builtin_unreachable();
   }
