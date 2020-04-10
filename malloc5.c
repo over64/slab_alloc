@@ -10,14 +10,8 @@ typedef struct {
 
 typedef struct meta_t {
   unsigned long* ptr4;
-  unsigned int idx4; // 0
-  unsigned int idx3; // 0
-  unsigned int idx2; // 0
-  unsigned int l3bit;
-  unsigned int l2bit;
-  unsigned int l1bit;
   unsigned int is_full;
-  unsigned int iidx4;
+  unsigned int n_part;
 } meta_t;
 
 typedef struct slab {
@@ -63,8 +57,10 @@ void my_init() {
 
 void __attribute((always_inline)) my_reindex( meta_t* meta) {
   unsigned long* l4_start = ((unsigned long*) meta) - 64 * 64 * 64;
+  unsigned int idx4 = meta->n_part / 64;
   unsigned long *l1_start, *l2_start, *l3_start;
-  unsigned long  l1bit, l2bit, l3bit;
+  unsigned long l1bit, l2bit, l3bit, l4bit;
+  unsigned int idx3, idx2;
 
   goto ii4;
 ii1:
@@ -86,55 +82,46 @@ ii1:
 ii2:
 //  printf("reindex2\n");
   l1_start = l2_start - 1;
-  l1_start[0] |= 1UL << meta->l1bit;
+  l1_start[0] |= 1UL << (idx2 % 64);
 ii2_tail:
   l1bit = __builtin_ffsl(~l1_start[0]);
-  if(__builtin_expect(l1bit == 0, 0)) goto ii1;
-  l1bit--;
+  if(__builtin_expect(l1bit == 0, 0)) goto ii1; else l1bit--;
 //  printf("l1bit=%ld", l1bit);
-  meta->idx2 = (unsigned int) l1bit;
-  meta->l1bit = l1bit;
+  idx2 = (unsigned int) l1bit;
   goto ii3_tail;
 ii3:
 //  printf("reindex3\n");
   l2_start = l3_start - 64;
-  l2_start[meta->idx2] |= 1UL << meta->l2bit;
+  idx2 = idx3 / 64;
+  l2_start[idx2] |= 1UL << (idx3 % 64);
 
 ii3_tail:
-  l2bit = __builtin_ffsl(~l2_start[meta->idx2]);
-  if(__builtin_expect(l2bit == 0, 0)) goto ii2;
-  l2bit--;
-  meta->idx3 = 64 * meta->idx2 + (unsigned int) l2bit;
-  meta->l2bit = l2bit;
+  l2bit = __builtin_ffsl(~l2_start[idx2]);
+  if(__builtin_expect(l2bit == 0, 0)) goto ii2; else l2bit--;
+  idx3 = 64 * idx2 + (unsigned int) l2bit;
   goto ii4_tail;
 ii4:
 //  printf("reindex4\n");
   l3_start = l4_start - 64 * 64;
-  l3_start[meta->idx3] |= 1UL << meta->l3bit;
+  idx3 = idx4 / 64;
+  l3_start[idx3] |= 1UL << (idx4 % 64);
 ii4_tail:
-  l3bit = __builtin_ffsl(~l3_start[meta->idx3]);
+  l3bit = __builtin_ffsl(~l3_start[idx3]);
   //printf("l3bit=%ld\n", l3bit);
-  if(__builtin_expect(l3bit == 0, 0)) goto ii3;
-  l3bit--;
-  meta->idx4 = 64 * meta->idx3 + (unsigned int) l3bit;
-  meta->ptr4 = &l4_start[meta->idx4];
-  meta->iidx4 = meta->idx4 * 64;
-  meta->l3bit = l3bit;
+  if(__builtin_expect(l3bit == 0, 0)) goto ii3; else l3bit--;
+  idx4 = 64 * idx3 + (unsigned int) l3bit;
+  meta->ptr4 = &l4_start[idx4];
+  meta->n_part = idx4 * 64;
 }
 
 void* __attribute__((noinline)) my_malloc(long size) {
   meta_t *meta = entry.current_meta;
   obj* current_data = (obj*)(meta + 1);
 
-  //printf("ptr4 = %ld\n", meta->ptr4);
-
-  //unsigned long* l4_start = ((unsigned long*) meta) - 64 * 64 * 64;
-  //unsigned int idx4 = meta->idx4;
+  unsigned long n_part = meta->n_part;
   unsigned long l4old = *(meta->ptr4);
   unsigned long l4bit = __builtin_ffsl(~l4old);
-  unsigned int iidx4 = meta->iidx4;
-  if(l4bit == 0) __builtin_unreachable();
-  l4bit--;
+  if(l4bit == 0) __builtin_unreachable(); else l4bit--;
 
   unsigned long l4new = l4old | (1UL << l4bit);
   *meta->ptr4 = l4new;
@@ -144,7 +131,7 @@ void* __attribute__((noinline)) my_malloc(long size) {
     my_reindex(meta);
 
 
-  unsigned int n = iidx4 | (unsigned int) l4bit;
+  unsigned int n = n_part | (unsigned int) l4bit;
   //printf("el.n = %d\n", n);
 
   obj* el = &current_data[n];
@@ -279,17 +266,13 @@ int main() {
      printf("assertion failed on l1\n");
      exit(1);
    }
-
 */
-
-
     for(int i = 16777215; i >= 0; i--) {
       my_free(&(cslab->data)[i].payload);
     }
     cslab->meta.is_full = 0; //FIXME
 
 /*
-
     for(int i = 0; i < 262144; i++) {
       if(cslab->bmap_l4[i] != 0) {
         printf("free assertion failed on l4 at %d with %lu \n", i, cslab->bmap_l4[i]);
