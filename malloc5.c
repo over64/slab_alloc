@@ -47,6 +47,7 @@ void my_init() {
   // как влияет calloc?
   cslab = (slab*) calloc(sizeof(slab), 1);
   cslab->meta.ptr4 = &cslab->bmap_l4[0];
+  *cslab->meta.ptr4 = ~(*cslab->meta.ptr4);
   entry.current_meta = &(cslab)->meta;
   entry.full = NULL;
   entry.partial = NULL;
@@ -110,6 +111,7 @@ ii3_tail:
 ii4:
 //  printf("reindex4\n");
   l3_start = l4_start - 64 * 64;
+  *meta->ptr4 = ~(*meta->ptr4);
   l3_start[meta->idx3] |= 1UL << meta->l3bit;
 ii4_tail:
   l3bit = __builtin_ffsl(~l3_start[meta->idx3]);
@@ -118,6 +120,7 @@ ii4_tail:
   l3bit--;
   meta->idx4 = 64 * meta->idx3 + (unsigned int) l3bit;
   meta->ptr4 = &l4_start[meta->idx4];
+  *meta->ptr4 = ~(*meta->ptr4);
   meta->iidx4 = meta->idx4 * 64;
   meta->l3bit = l3bit;
 }
@@ -131,15 +134,15 @@ void* __attribute__((noinline)) my_malloc(long size) {
   //unsigned long* l4_start = ((unsigned long*) meta) - 64 * 64 * 64;
   //unsigned int idx4 = meta->idx4;
   unsigned long l4old = *(meta->ptr4);
-  unsigned long l4bit = __builtin_ffsl(~l4old);
+  unsigned long l4bit = __builtin_ffsl(l4old);
   unsigned int iidx4 = meta->iidx4;
   if(l4bit == 0) __builtin_unreachable();
   l4bit--;
 
-  unsigned long l4new = l4old | (1UL << l4bit);
+  unsigned long l4new = l4old & (~(1UL << l4bit));
   *meta->ptr4 = l4new;
 
-  if(__builtin_expect(__builtin_popcountl(l4old) == 63, 0))
+  if(__builtin_expect(__builtin_popcountl(l4old) == 1, 0))
   //if(__builtin_expect(l4new == ULONG_MAX, 0))
     my_reindex(meta);
 
@@ -185,7 +188,7 @@ void __attribute__((always_inline)) free_storage_class(void* ptr, unsigned int m
   unsigned long idx4 = m % 64;
   m = m / 64;
   unsigned long l4map = l4_start[m];
-  l4_start[m] &= ~(1UL << idx4);
+  l4_start[m] ^= (1UL << idx4);
 
   if(__builtin_expect(l4map != ULONG_MAX, 1))
     return;
@@ -197,7 +200,7 @@ void __attribute__((always_inline)) free_storage_class(void* ptr, unsigned int m
   unsigned long idx3 = m % 64;
   m = m / 64;
   unsigned long l3map = l3_start[m];
-  l3_start[m] &= ~(1UL << idx3);
+  l3_start[m] ^= (1UL << idx3);
 
   if(__builtin_expect(l3map != ULONG_MAX, 1))
     return;
@@ -209,7 +212,7 @@ void __attribute__((always_inline)) free_storage_class(void* ptr, unsigned int m
   unsigned long idx2 = m % 64;
   m = m / 64;
   unsigned long l2map = l2_start[m];
-  l2_start[m] &= ~(1UL << idx2);
+  l2_start[m] ^= (1UL << idx2);
 
   if(__builtin_expect(l2map != ULONG_MAX, 1))
     return;
@@ -219,7 +222,7 @@ void __attribute__((always_inline)) free_storage_class(void* ptr, unsigned int m
   entries = entries / 64;
   unsigned long* l1_start = &l2_start[entries];
   unsigned long idx1 = m;
-  l1_start[0] &= ~(1UL << idx1);
+  l1_start[0] ^= (1UL << idx1);
 }
 
 void __attribute__((noinline)) my_free(void* ptr) {
@@ -253,7 +256,7 @@ int main() {
 //      n++;
     }
 
-/*
+
     for(int i = 0; i < 262144; i++) {
       if(cslab->bmap_l4[i] != ULONG_MAX) {
         printf("assertion failed on l4 at %d\n", i);
@@ -280,7 +283,7 @@ int main() {
      exit(1);
    }
 
-*/
+
 
 
     for(int i = 16777215; i >= 0; i--) {
@@ -288,7 +291,7 @@ int main() {
     }
     cslab->meta.is_full = 0; //FIXME
 
-/*
+
 
     for(int i = 0; i < 262144; i++) {
       if(cslab->bmap_l4[i] != 0) {
@@ -315,7 +318,7 @@ int main() {
      printf("free assertion failed on l1\n");
      exit(1);
    }
-*/
+
 
     n++;
   }
