@@ -16,6 +16,7 @@ typedef struct meta_t {
 } meta_t;
 
 typedef struct slab {
+//  unsigned long __cacheline_pad__[7];
   unsigned long bmap_l1;
   unsigned long bmap_l2[64];
   unsigned long bmap_l3[4096];
@@ -58,29 +59,18 @@ void my_init() {
 //  }
 }
 
-void __attribute((always_inline)) my_reindex( meta_t* meta) {
+void __attribute((always_inline)) my_reindex(meta_t* meta, unsigned int n_part) {
   unsigned long* l4_start = ((unsigned long*) meta) - 64 * 64 * 64;
-  unsigned int idx4 = meta->n_part / 64;
+  unsigned int idx4 = n_part / 64;
   unsigned long *l1_start, *l2_start, *l3_start;
   unsigned long l1bit, l2bit, l3bit, l4bit;
   unsigned int idx3, idx2;
 
   goto ii4;
 ii1:
-//  printf("reindex1");
-  // this slab is full;
-  if(meta->is_full) {
-    //printf("out of memory\n");
-    //exit(1);
-    //abort();
-    //void *ptr = (void *)0x1234567;  // a random memory address
-    //goto *ptr;
-    while(1); // die
-//    __builtin_unreachable();
-  }
-
-  meta->is_full = 1;
-  return;
+  // alloc new slab
+  while(1); // but now die
+  goto ii2_tail;
 ii2:
 //  printf("reindex2\n");
   l1_start = l2_start - 1;
@@ -123,7 +113,7 @@ void* __attribute__((noinline)) my_malloc(unsigned long size) {
 
   meta_t *meta = entry.slabs[sclass];
   void* current_data = (void*)(meta + 1);
-  unsigned long n_part = meta->n_part;
+  unsigned int n_part = meta->n_part;
   //unsigned long class_size = meta->size;
 
   unsigned long l4old = *(meta->ptr4);
@@ -145,7 +135,7 @@ void* __attribute__((noinline)) my_malloc(unsigned long size) {
 
   //if(__builtin_expect(__builtin_popcountl(l4old) == 63, 0))
   if(__builtin_expect(l4new == ULONG_MAX, 0))
-    my_reindex(meta);
+    my_reindex(meta, n_part);
 
   return result;
 }
@@ -229,17 +219,13 @@ void __attribute__((noinline)) my_free(void* ptr) {
 }
 
 int main() {
-  printf("ffs(0) = %d\n", __builtin_ffsll(0));
-  printf("ffs(1) = %d\n", __builtin_ffsll(1) - 1);
-  printf("ffs(4096) = %d\n", __builtin_ffsll(4096) - 1);
-
   my_init();
 
   long n = 0;
 
   while(n < 1000) {
 //    printf("n=%ld\n", n);
-    for(int i = 0; i < 16777216; i++) {
+    for(int i = 0; i < 16777215; i++) {
 //      printf("alloc n = %d ", i);
       my_malloc(8);
 //      if(my_malloc(16) == NULL) {
@@ -249,38 +235,40 @@ int main() {
 //      n++;
     }
 
+
 /*
-    for(int i = 0; i < 262144; i++) {
+    for(int i = 0; i < 262143; i++) {
       if(cslab->bmap_l4[i] != ULONG_MAX) {
         printf("assertion failed on l4 at %d\n", i);
         exit(1);
       }
     }
 
-    for(int i = 0; i < 4096; i++) {
+    for(int i = 0; i < 4095; i++) {
       if(cslab->bmap_l3[i] != ULONG_MAX) {
         printf("assertion failed on l3 at %d\n", i);
         exit(1);
       }
     }
 
-    for(int i = 0; i < 64; i++) {
+    for(int i = 0; i < 63; i++) {
       if(cslab->bmap_l2[i] != ULONG_MAX) {
         printf("assertion failed on l2\n");
         exit(1);
       }
     }
 
-   if(cslab->bmap_l1 != ULONG_MAX) {
-     printf("assertion failed on l1\n");
-     exit(1);
-   }
-*/
+   //if(cslab->bmap_l1 != ULONG_MAX) {
+//     printf("assertion failed on l1\n");
+//     exit(1);
+  // }
 
+*/
     for(int i = 16777215; i >= 0; i--) {
       my_free(&(cslab->data)[i].payload);
     }
-    cslab->meta.is_full = 0; //FIXME
+    cslab->meta.n_part = 0;
+    cslab->meta.ptr4 = &cslab->bmap_l4[0];
 
 
 /*
