@@ -10,6 +10,7 @@ typedef struct {
 
 typedef struct meta_t {
   unsigned long* ptr4;
+  unsigned long size;
   unsigned int is_full;
   unsigned int n_part;
 } meta_t;
@@ -26,7 +27,7 @@ typedef struct slab {
 
 typedef struct {
   //__attribute__((aligned(64)))
-  meta_t* current_meta;
+  meta_t* slabs[2];
   slab* full;
   slab* partial;
   slab* free;
@@ -41,7 +42,9 @@ void my_init() {
   // как влияет calloc?
   cslab = (slab*) calloc(sizeof(slab), 1);
   cslab->meta.ptr4 = &cslab->bmap_l4[0];
-  entry.current_meta = &(cslab)->meta;
+  cslab->meta.size = 16;
+  entry.slabs[0] = NULL;
+  entry.slabs[1] = &(cslab)->meta;
   entry.full = NULL;
   entry.partial = NULL;
   entry.free = NULL;
@@ -72,8 +75,7 @@ ii1:
     //abort();
     //void *ptr = (void *)0x1234567;  // a random memory address
     //goto *ptr;
-    while(1);
-    // die
+    while(1); // die
 //    __builtin_unreachable();
   }
 
@@ -114,11 +116,16 @@ ii4_tail:
   meta->n_part = idx4 * 64;
 }
 
-void* __attribute__((noinline)) my_malloc(long size) {
-  meta_t *meta = entry.current_meta;
-  obj* current_data = (obj*)(meta + 1);
+unsigned int alloc_sizes[] = {16, 16};
 
+void* __attribute__((noinline)) my_malloc(unsigned long size) {
+  unsigned int sclass = size / 8;
+
+  meta_t *meta = entry.slabs[sclass];
+  void* current_data = (void*)(meta + 1);
   unsigned long n_part = meta->n_part;
+  //unsigned long class_size = meta->size;
+
   unsigned long l4old = *(meta->ptr4);
   unsigned long l4bit = __builtin_ffsl(~l4old);
   if(l4bit == 0) __builtin_unreachable(); else l4bit--;
@@ -126,19 +133,21 @@ void* __attribute__((noinline)) my_malloc(long size) {
   unsigned long l4new = l4old | (1UL << l4bit);
   *meta->ptr4 = l4new;
 
-  if(__builtin_expect(__builtin_popcountl(l4old) == 63, 0))
-  //if(__builtin_expect(l4new == ULONG_MAX, 0))
-    my_reindex(meta);
-
-
   unsigned int n = n_part | (unsigned int) l4bit;
   //printf("el.n = %d\n", n);
 
-  obj* el = &current_data[n];
-  el->rcAndSc = 0;
+  unsigned long class_size = meta->size;
+  obj* el = (obj*) &current_data[n * class_size];
+  el->rcAndSc = sclass;
   el->n = n;
 
-  return &el->payload;
+  void* result = &el->payload;
+
+  //if(__builtin_expect(__builtin_popcountl(l4old) == 63, 0))
+  if(__builtin_expect(l4new == ULONG_MAX, 0))
+    my_reindex(meta);
+
+  return result;
 }
 
 typedef struct {
@@ -147,8 +156,8 @@ typedef struct {
 } sclass_t;
 
 sclass_t classes[] = {
-  { -16, -262144 - 1 - sizeof(meta_t) / 8 },
-  { -32, -262144 - 1 - sizeof(meta_t) / 8 }
+  { -16,  -262144 - 1 - sizeof(meta_t) / 8 }, // [0..8]
+  { -16,  -262144 - 1 - sizeof(meta_t) / 8 }, // [9..16]
 };
 
 // engine to calc classes
@@ -232,7 +241,7 @@ int main() {
 //    printf("n=%ld\n", n);
     for(int i = 0; i < 16777216; i++) {
 //      printf("alloc n = %d ", i);
-      my_malloc(16);
+      my_malloc(8);
 //      if(my_malloc(16) == NULL) {
 //        printf("out of memoryyy\n");
 //        exit(1);
@@ -267,10 +276,12 @@ int main() {
      exit(1);
    }
 */
+
     for(int i = 16777215; i >= 0; i--) {
       my_free(&(cslab->data)[i].payload);
     }
     cslab->meta.is_full = 0; //FIXME
+
 
 /*
     for(int i = 0; i < 262144; i++) {
