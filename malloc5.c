@@ -102,8 +102,6 @@ ii4_tail:
   meta->n_part = idx4 * 64;
 }
 
-unsigned int alloc_sizes[] = {16, 16};
-
 void* __attribute__((noinline)) my_malloc(unsigned long size) {
   unsigned int sclass = size / 8;
 
