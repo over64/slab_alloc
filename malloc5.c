@@ -13,6 +13,7 @@ typedef struct meta_t {
   unsigned long size;
   unsigned int is_full;
   unsigned int n_part;
+  unsigned long* l_start[4];
 } meta_t;
 
 typedef struct slab {
@@ -44,6 +45,12 @@ void my_init() {
   cslab = (slab*) calloc(sizeof(slab), 1);
   cslab->meta.ptr4 = &cslab->bmap_l4[0];
   cslab->meta.size = 16;
+
+  cslab->meta.l_start[3] = &cslab->bmap_l4[0];
+  cslab->meta.l_start[2] = &cslab->bmap_l3[0];
+  cslab->meta.l_start[1] = &cslab->bmap_l2[0];
+  cslab->meta.l_start[0] = &cslab->bmap_l1;
+
   entry.slabs[0] = NULL;
   entry.slabs[1] = &(cslab)->meta;
   entry.full = NULL;
@@ -60,9 +67,7 @@ void my_init() {
 }
 
 void __attribute((always_inline)) my_reindex(meta_t* meta, unsigned int n_part) {
-  unsigned long* l4_start = ((unsigned long*) meta) - 64 * 64 * 64;
   unsigned int idx4 = n_part / 64;
-  unsigned long *l1_start, *l2_start, *l3_start;
   unsigned long l1bit, l2bit, l3bit, l4bit;
   unsigned int idx3, idx2;
 
@@ -72,37 +77,28 @@ ii1:
   while(1); // but now die
   goto ii2_tail;
 ii2:
-//  printf("reindex2\n");
-  l1_start = l2_start - 1;
-  l1_start[0] |= 1UL << (idx2 % 64);
+  meta->l_start[0][0] |= 1UL << (idx2 % 64);
 ii2_tail:
-  l1bit = __builtin_ffsl(~l1_start[0]);
+  l1bit = __builtin_ffsl(~meta->l_start[0][0]);
   if(__builtin_expect(l1bit == 0, 0)) goto ii1; else l1bit--;
-//  printf("l1bit=%ld", l1bit);
   idx2 = (unsigned int) l1bit;
   goto ii3_tail;
 ii3:
-//  printf("reindex3\n");
-  l2_start = l3_start - 64;
   idx2 = idx3 / 64;
-  l2_start[idx2] |= 1UL << (idx3 % 64);
-
+  meta->l_start[1][idx2] |= 1UL << (idx3 % 64);
 ii3_tail:
-  l2bit = __builtin_ffsl(~l2_start[idx2]);
+  l2bit = __builtin_ffsl(~meta->l_start[1][idx2]);
   if(__builtin_expect(l2bit == 0, 0)) goto ii2; else l2bit--;
   idx3 = 64 * idx2 + (unsigned int) l2bit;
   goto ii4_tail;
 ii4:
-//  printf("reindex4\n");
-  l3_start = l4_start - 64 * 64;
   idx3 = idx4 / 64;
-  l3_start[idx3] |= 1UL << (idx4 % 64);
+  meta->l_start[2][idx3] |= 1UL << (idx4 % 64);
 ii4_tail:
-  l3bit = __builtin_ffsl(~l3_start[idx3]);
-  //printf("l3bit=%ld\n", l3bit);
+  l3bit = __builtin_ffsl(~meta->l_start[2][idx3]);
   if(__builtin_expect(l3bit == 0, 0)) goto ii3; else l3bit--;
   idx4 = 64 * idx3 + (unsigned int) l3bit;
-  meta->ptr4 = &l4_start[idx4];
+  meta->ptr4 = &meta->l_start[3][idx4];
   meta->n_part = idx4 * 64;
 }
 
