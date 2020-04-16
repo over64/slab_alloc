@@ -25,7 +25,7 @@ typedef struct slab {
 
 typedef struct {
   //__attribute__((aligned(64)))
-  meta_t* slabs[2];
+  meta_t* slabs[3];
   slab* full;
   slab* partial;
   slab* free;

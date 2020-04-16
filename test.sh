@@ -1,3 +1,4 @@
 rm ./a.out
-clang-9 malloc.c test.c -O3 -march=native
-./a.out
+clang-9 malloc.c test.c -march=native -g
+#valgrind ./a.out
+ ./a.out

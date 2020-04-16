@@ -21,6 +21,8 @@ int main() {
 //      };
 //      n++;
     }
+    
+    printf("iter = %ld\n", n);
 
 
 
@@ -51,8 +53,9 @@ int main() {
   // }
 
 
-    for(int i = 16777215; i >= 0; i--) {
-      my_free(&(cslab->data)[i].payload);
+    for(int i = 16777214; i >= 0; i--) {
+//      printf("free(%d)\n", i);
+      my_free(&cslab->data[i].payload);
     }
     cslab->meta.n_part = 0;
     cslab->meta.ptr4 = &cslab->bmap_l4[0];

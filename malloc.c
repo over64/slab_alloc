@@ -20,13 +20,15 @@ void my_init() {
   cslab->meta.l_start[0] = &cslab->bmap_l1;
 
   entry.slabs[0] = NULL;
+//  entry.slabs[1] = NULL;
   entry.slabs[1] = &(cslab)->meta;
   entry.full = NULL;
   entry.partial = NULL;
   entry.free = NULL;
-  printf("data start(0) = %ld\n", &cslab->data);
-  printf("l4_start(0) = %ld\n", &cslab->bmap_l4[0]);
-  printf("meta.ptr4 = %ld\n", &cslab->meta.ptr4);
+  printf("meta start = %p\n", &cslab->meta);
+  printf("data start(0) = %p\n", &cslab->data[0]);
+  printf("l4_start(0) = %p\n", &cslab->bmap_l4[0]);
+  printf("meta.ptr4 = %p\n", &cslab->meta.ptr4);
 
 //  if(entry.current == NULL) {
 //    printf("cannot allocate slab\n");
@@ -99,7 +101,7 @@ void* __attribute__((noinline)) my_malloc(unsigned long size) {
   *meta->ptr4 = l4new;
 
   unsigned int n = n_part | (unsigned int) l4bit;
-  //printf("el.n = %d\n", n);
+//  printf("el.n = %d\n", n);
 
   unsigned long class_size = meta->size;
   obj* el = (obj*) &current_data[n * class_size];
@@ -107,6 +109,8 @@ void* __attribute__((noinline)) my_malloc(unsigned long size) {
   el->n = n;
 
   void* result = &el->payload;
+//  printf("res = %p\n", result);
+//  exit(1);
 
   //if(__builtin_expect(__builtin_popcountl(l4old) == 63, 0))
   if(__builtin_expect(l4new == ULONG_MAX, 0))
@@ -131,64 +135,82 @@ sclass_t classes[] = {
 //long class_to_entries[] = {-262145, -262145};
 
 
-void __attribute__((always_inline)) free_storage_class(void* ptr, unsigned int m, long size, long entries) {
-
-  void* data_start = &ptr[m * size];
-  unsigned long* lptr = (unsigned long*) data_start;
+void __attribute__((always_inline)) free_storage_class(unsigned int m, unsigned long** levels) {
 
   //printf("here 4\n");
   //printf("free n = %d\n", m);
 
-  unsigned long* l4_start = &lptr[entries];
+//  unsigned long* l4_start = &lptr[entries];
 //  printf("free l4_start=%ld\n", l4_start);
  // exit(1);
   //printf("free m=%u\n", m);
   unsigned long idx4 = m % 64;
   m = m / 64;
-  unsigned long l4map = l4_start[m];
-  l4_start[m] &= ~(1UL << idx4);
+  unsigned long l4map = levels[-1][m];
+  levels[-1][m] &= ~(1UL << idx4);
 
   if(__builtin_expect(l4map != ULONG_MAX, 1))
     return;
 
   //printf("here 3\n");
 
-  entries /= 64;
-  unsigned long* l3_start = &l4_start[entries];
   unsigned long idx3 = m % 64;
   m = m / 64;
-  unsigned long l3map = l3_start[m];
-  l3_start[m] &= ~(1UL << idx3);
+  unsigned long l3map = levels[-2][m];
+  levels[-2][m] &= ~(1UL << idx3);
 
   if(__builtin_expect(l3map != ULONG_MAX, 1))
     return;
 
   //printf("here 2\n");
 
-  entries = entries / 64;
-  unsigned long* l2_start = &l3_start[entries];
+//  entries = entries / 64;
+//  unsigned long* l2_start = &l3_start[entries];
   unsigned long idx2 = m % 64;
   m = m / 64;
-  unsigned long l2map = l2_start[m];
-  l2_start[m] &= ~(1UL << idx2);
+  unsigned long l2map = levels[-3][m];
+  levels[-3][m] &= ~(1UL << idx2);
 
   if(__builtin_expect(l2map != ULONG_MAX, 1))
     return;
 
   //printf("here 1\n");
 
-  entries = entries / 64;
-  unsigned long* l1_start = &l2_start[entries];
+//  entries = entries / 64;
+ // unsigned long* l1_start = &l2_start[entries];
   unsigned long idx1 = m;
-  l1_start[0] &= ~(1UL << idx1);
+  levels[-4][0] &= ~(1UL << idx1);
 }
 
 void __attribute__((noinline)) my_free(void* ptr) {
   void* pptr = &ptr[-8];
   obj* el = (obj*) pptr;
   unsigned int m = el->n;
-  int rcAndSc = el->rcAndSc;
-  sclass_t class = classes[el->rcAndSc];
+  unsigned int sclass = el->rcAndSc;
 
-  free_storage_class(ptr, m, class.size, class.entries);
+  unsigned int size = 8 + 8 * sclass; // by 8
+  unsigned long off;
+  void* meta_last;
+  if(__builtin_expect(sclass > 12, 0)) goto find;
+found:
+  off = m * size;
+  meta_last = pptr - off;
+//  printf("m = %lu, ptr = %p, pptr = %p, off = %lu, meta_last = %p\n", m, ptr, pptr, off, meta_last);
+  free_storage_class(m, (unsigned long**) meta_last);
+  return;
+find:
+  if(     __builtin_expect(sclass < 32, 0)) // by 16
+    size = 8 + 96 + (sclass - 12) * 16;
+  else if(__builtin_expect(sclass < 48, 0)) // by 64
+    size = 8 + 416 + (sclass - 48) * 64;
+  else if(__builtin_expect(sclass < 64, 0)) // by 256
+    size = 8 + 1408 + (sclass - 64) * 256;
+  else if(__builtin_expect(sclass < 80, 0)) // by 1024
+    size = 8 + 5376 + (sclass - 64) * 1024;
+  else if(__builtin_expect(sclass > 96, 0)) // by 4096
+    size = 8 + 21504 + (sclass - 80) * 4096;
+  else                                      // MMAP
+    while(1);
+
+  goto found;
 }

@@ -21,7 +21,7 @@ int main() {
     }
 
 
-    for(int i = 16777215; i >= 0; i--) {
+    for(int i = 16777214; i >= 0; i--) {
       my_free(&(cslab->data)[i].payload);
     }
     cslab->meta.n_part = 0;
