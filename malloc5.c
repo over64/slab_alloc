@@ -105,6 +105,19 @@ ii4_tail:
 void* __attribute__((noinline)) my_malloc(unsigned long size) {
   unsigned int sclass = size / 8;
 
+  if(__builtin_expect(sclass > 12, 0)) // by 8
+    if(__builtin_expect(sclass > 52, 0)) // by 16
+      if(__builtin_expect(sclass > 176, 0)) // by 64
+        if(__builtin_expect(sclass > 672, 0)) // by 256
+          if(__builtin_expect(sclass > 2688, 0)) // by 1024
+            if(__builtin_expect(sclass > 10752, 0)) // by 4096
+              while(1);
+            else sclass = 12 + (size - 96) / 16;
+          else sclass = 32 + (size - 416) / 64;
+        else sclass = 48 + (size - 1408) / 256;
+      else sclass = 64 + (size - 5376) / 1024;
+    else sclass = 80 + (size - 21504) / 4096;
+
   meta_t *meta = entry.slabs[sclass];
   void* current_data = (void*)(meta + 1);
   unsigned int n_part = meta->n_part;
