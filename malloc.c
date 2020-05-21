@@ -24,6 +24,14 @@ void my_init() {
     cslab->data[i].rcAndSc = 1;
   }
 
+  for(int i = 0; i < 262144; i++)
+    cslab->bmap_l4[i] = ULONG_MAX;
+  for(int i = 0; i < 4096; i++)
+    cslab->bmap_l3[i] = ULONG_MAX;
+  for(int i = 0; i < 64; i++)
+    cslab->bmap_l2[i] = ULONG_MAX;
+  cslab->bmap_l1 = ULONG_MAX;
+
   entry.slabs[0] = NULL;
 //  entry.slabs[1] = NULL;
   entry.slabs[1] = &(cslab)->meta;
@@ -46,33 +54,41 @@ void __attribute((always_inline)) my_reindex(meta_t* meta, unsigned int n_part) 
   unsigned long l1bit, l2bit, l3bit, l4bit;
   unsigned int idx3, idx2;
 
+
   goto ii4;
 ii1:
+//  printf("oom %d %d %d\n", idx4, idx3, idx2);
   // alloc new slab
   while(1); // but now die
   goto ii2_tail;
 ii2:
-  meta->l_start[0][0] |= 1UL << (idx2 % 64);
+//  printf("root=%lu\n", meta->l_start[0][0]);
+  meta->l_start[0][0] ^= (1UL << (idx2 % 64));
 ii2_tail:
-  l1bit = __builtin_ffsl(~meta->l_start[0][0]);
+  l1bit = __builtin_ffsl(meta->l_start[0][0]);
   if(__builtin_expect(l1bit == 0, 0)) goto ii1; else l1bit--;
   idx2 = (unsigned int) l1bit;
+//  printf("l1bit=%lu idx2=%d idx3=%d idx4=%d\n", l1bit, idx2, idx3, idx4);
   goto ii3_tail;
 ii3:
   idx2 = idx3 / 64;
-  meta->l_start[1][idx2] |= 1UL << (idx3 % 64);
+  meta->l_start[1][idx2] ^= (1UL << (idx3 % 64));
 ii3_tail:
-  l2bit = __builtin_ffsl(~meta->l_start[1][idx2]);
+  l2bit = __builtin_ffsl(meta->l_start[1][idx2]);
+//  printf("pre l2r = %lu\n", meta->l_start[1][idx2]);
+//  printf("pre idx3=%d idx2=%d\n", idx3, idx2);
   if(__builtin_expect(l2bit == 0, 0)) goto ii2; else l2bit--;
   idx3 = 64 * idx2 + (unsigned int) l2bit;
+//  printf("idx3=%d idx2=%d\n", idx3, idx2);
   goto ii4_tail;
 ii4:
   idx3 = idx4 / 64;
-  meta->l_start[2][idx3] |= 1UL << (idx4 % 64);
+  meta->l_start[2][idx3] ^= (1UL << (idx4 % 64));
 ii4_tail:
-  l3bit = __builtin_ffsl(~meta->l_start[2][idx3]);
+  l3bit = __builtin_ffsl(meta->l_start[2][idx3]);
   if(__builtin_expect(l3bit == 0, 0)) goto ii3; else l3bit--;
   idx4 = 64 * idx3 + (unsigned int) l3bit;
+//  printf("idx4=%d\n", idx4);
   meta->ptr4 = &meta->l_start[3][idx4];
   meta->n_part = idx4 * 64;
 }
@@ -99,10 +115,10 @@ void* __attribute__((noinline)) my_malloc(unsigned long size) {
   //unsigned long class_size = meta->size;
 
   unsigned long l4old = *(meta->ptr4);
-  unsigned long l4bit = __builtin_ffsl(~l4old);
+  unsigned long l4bit = __builtin_ffsl(l4old);
   if(l4bit == 0) __builtin_unreachable(); else l4bit--;
 
-  unsigned long l4new = l4old | (1UL << l4bit);
+  unsigned long l4new = l4old ^ (1UL << l4bit);
   *meta->ptr4 = l4new;
 
   unsigned int n = n_part | (unsigned int) l4bit;
@@ -114,11 +130,11 @@ void* __attribute__((noinline)) my_malloc(unsigned long size) {
 //  el->n = n;
 
   void* result = &el->payload;
-//  printf("res = %p\n", result);
+//  printf("l4new = %lu\n", l4new);
 //  exit(1);
 
   //if(__builtin_expect(__builtin_popcountl(l4old) == 63, 0))
-  if(__builtin_expect(l4new == ULONG_MAX, 0))
+  if(__builtin_expect(l4new == 0, 0))
     my_reindex(meta, n_part);
 
   return result;
@@ -152,9 +168,9 @@ void __attribute__((always_inline)) free_storage_class(unsigned int m, unsigned 
   unsigned long idx4 = m % 64;
   m = m / 64;
   unsigned long l4map = levels[-1][m];
-  levels[-1][m] &= ~(1UL << idx4);
+  levels[-1][m] |= (1UL << idx4);
 
-  if(__builtin_expect(l4map != ULONG_MAX, 1))
+  if(__builtin_expect(l4map != 0, 1))
     return;
 
   //printf("here 3\n");
@@ -162,9 +178,9 @@ void __attribute__((always_inline)) free_storage_class(unsigned int m, unsigned 
   unsigned long idx3 = m % 64;
   m = m / 64;
   unsigned long l3map = levels[-2][m];
-  levels[-2][m] &= ~(1UL << idx3);
+  levels[-2][m] |= (1UL << idx3);
 
-  if(__builtin_expect(l3map != ULONG_MAX, 1))
+  if(__builtin_expect(l3map != 0, 1))
     return;
 
   //printf("here 2\n");
@@ -174,9 +190,9 @@ void __attribute__((always_inline)) free_storage_class(unsigned int m, unsigned 
   unsigned long idx2 = m % 64;
   m = m / 64;
   unsigned long l2map = levels[-3][m];
-  levels[-3][m] &= ~(1UL << idx2);
+  levels[-3][m] |= (1UL << idx2);
 
-  if(__builtin_expect(l2map != ULONG_MAX, 1))
+  if(__builtin_expect(l2map != 0, 1))
     return;
 
   //printf("here 1\n");
@@ -184,7 +200,7 @@ void __attribute__((always_inline)) free_storage_class(unsigned int m, unsigned 
 //  entries = entries / 64;
  // unsigned long* l1_start = &l2_start[entries];
   unsigned long idx1 = m;
-  levels[-4][0] &= ~(1UL << idx1);
+  levels[-4][0] |= (1UL << idx1);
 }
 
 void __attribute__((noinline)) my_free(void* ptr) {
