@@ -19,6 +19,11 @@ void my_init() {
   cslab->meta.l_start[1] = &cslab->bmap_l2[0];
   cslab->meta.l_start[0] = &cslab->bmap_l1;
 
+  for(int i = 0; i < 16777215; i++) {
+    cslab->data[i].n = i;
+    cslab->data[i].rcAndSc = 1;
+  }
+
   entry.slabs[0] = NULL;
 //  entry.slabs[1] = NULL;
   entry.slabs[1] = &(cslab)->meta;
@@ -105,8 +110,8 @@ void* __attribute__((noinline)) my_malloc(unsigned long size) {
 
   unsigned long class_size = meta->size;
   obj* el = (obj*) &current_data[n * class_size];
-  el->rcAndSc = sclass;
-  el->n = n;
+//  el->rcAndSc = sclass;
+//  el->n = n;
 
   void* result = &el->payload;
 //  printf("res = %p\n", result);
